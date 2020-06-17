@@ -6,8 +6,14 @@
 #include <QTreeView>
 #include <QHeaderView>
 #include <QScrollArea>
+#include <QStyledItemDelegate>
+#include <QListWidget>
+#include <QPainter>
 #include <iostream>
 #include <queue>
+//#include <typeinfo>
+
+#include "oggtagproxy.h"
 
 class oggView : public QTreeView
 {

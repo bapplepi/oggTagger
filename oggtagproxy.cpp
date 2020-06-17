@@ -12,15 +12,15 @@
 void oggTagProxy::fill(const QString &path)
 {
 
-    std::cout << "dir loaded " << path.toStdString() << std::endl << std::flush;
+    //std::cout << "dir loaded " << path.toStdString() << std::endl << std::flush;
 
     tagDataNode* node = new tagDataNode();
 
     QModelIndex idx = ((QFileSystemModel*) sourceModel())->index(path);
 
     node->row = idx.row();
-    node->fileBaseNode = QPersistentModelIndex(idx);
-    node->proxyBaseNode = QPersistentModelIndex(QSortFilterProxyModel::mapFromSource(idx));
+    node->fileBaseNode = new QPersistentModelIndex(idx);
+    node->proxyBaseNode = new QPersistentModelIndex(QSortFilterProxyModel::mapFromSource(idx));
     node->tagData = new tagDataMap();
 
     tagData.insert(std::make_pair(path, node));
@@ -36,10 +36,14 @@ void oggTagProxy::fill(const QString &path)
 
         idx = ((QFileSystemModel*) sourceModel())->index(it.filePath());
 
+        //std::cout << "idx " << idx.row() << " " << idx.column() << std::endl;
+
         node->row = idx.row();
-        node->fileBaseNode = QPersistentModelIndex(idx);
-        node->proxyBaseNode = QPersistentModelIndex(QSortFilterProxyModel::mapFromSource(idx));
+        node->fileBaseNode = new QPersistentModelIndex(idx);
+        node->proxyBaseNode = new QPersistentModelIndex(QSortFilterProxyModel::mapFromSource(idx));
         node->tagData = new tagDataMap();
+
+        //std::cout << node->fileBaseNode->row() << " " << node->fileBaseNode->column() << std::endl << std::flush;
 
         tagData.insert(std::make_pair(it.filePath(), node));
 
@@ -50,169 +54,234 @@ void oggTagProxy::fill(const QString &path)
     return;
 }
 
-oggTagProxy::oggTagProxy() {
+
+oggTagProxy::oggTagProxy() {}
 
 
+oggTagProxy::oggTagProxy(int ex) : extraColumns(ex) {}
+
+
+QModelIndex oggTagProxy::mapToSource(const QModelIndex &proxyIndex) const
+{
+    if(proxyIndex.column() == 0)
+        return QSortFilterProxyModel::mapToSource(proxyIndex);
+
+    return QModelIndex();
 }
 
 
-/*oggTagProxy::oggTagProxy(int extra, std::set<int> valid, QString root) : extraColumns(extra), QSortFilterProxyModel(),
-                                                                             rootPath(root)
+QString oggTagProxy::filePath(QModelIndex index) const
 {
-    validColumns = valid;
-    tagDataRoot.row = 0;
-    tagDataRoot.column = 0;
-    tagDataRoot.data = NULL;
-    tagDataRoot.parent = NULL;
-
-    dirs.insert(std::make_pair(rootPath, &tagDataRoot));
-}*/
-
-QModelIndex oggTagProxy::parent(const QModelIndex &child) const
-{
-    if(child.internalPointer() != NULL) {
-        QModelIndex baseChild = ((tagDataNode*) child.internalPointer())->fileBaseNode;
-        QModelIndex baseParent = sourceModel()->parent(baseChild);
-        return mapFromSource(baseParent);
-
-    }
-
-    return QModelIndex();
+    QModelIndex i = mapToSource(oggTagProxy::index(index.row(), 0, index.parent()));
+    return ((QFileSystemModel*) sourceModel())->filePath(i);
 }
 
 
 QModelIndex oggTagProxy::index(int row, int column, const QModelIndex &parent) const
 {
-    if(row >= 0 && column >= 0 && row < rowCount(parent) && column < columnCount(parent)) {
-        //std::cout << row << " " << column << std::endl << std::flush;
-        QModelIndex proxyIndex;
 
-        if(parent.internalPointer() != NULL) {
-            tagDataNode* p = (tagDataNode*) parent.internalPointer();
-            proxyIndex = QSortFilterProxyModel::index(row, column, p->proxyBaseNode);
-        }
-        else
-            proxyIndex = QSortFilterProxyModel::index(row, column, QModelIndex());
-
-        QModelIndex sourceIndex = QSortFilterProxyModel::mapToSource(proxyIndex);
-        QString filePath = ((QFileSystemModel*) sourceModel())->filePath(sourceIndex);
-
-        //std::cout << filePath.toStdString() << std::endl << std::flush;
-
-        if(tagData.count(filePath) > 0) {
-            tagDataNode* n = tagData.at(filePath);
-            return createIndex(row, column, n);
-        }
-        else
-            return createIndex(row, column, (void *) NULL);
+    if(column > 0) {
+        //std::cout << "B" << std::endl << std::flush;
+        QString path = filePath(QSortFilterProxyModel::index(row, 0, parent));
+        //std::cout << "C" << std::endl << std::flush;
+        if(!path.isNull() && tagData.count(path) > 0)
+            //return QSortFilterProxyModel::createIndex(row, column, tagData.at(path));
+            return QSortFilterProxyModel::index(row, column, parent);
     }
 
-    return QModelIndex();
+    return QSortFilterProxyModel::index(row, column, parent);
+}
+
+
+int oggTagProxy::rowCount(const QModelIndex &parent) const
+{
+
+    //std::cout << parent.column() << std::endl;
+    if(parent.column() == Tag::artist) {
+        QVariantList d = data(parent, Qt::DisplayRole).toList();
+        std::cout << "list length " << d.size() << std::endl;
+    }
+
+    return QSortFilterProxyModel::rowCount(parent);
 }
 
 
 int oggTagProxy::columnCount(const QModelIndex &parent) const
 {
+    //std::cout << QSortFilterProxyModel::columnCount(parent) + extraColumns << std::endl;
     return QSortFilterProxyModel::columnCount(parent) + extraColumns;
 }
 
-//assume index belongs to our model
-QModelIndex oggTagProxy::mapToSource(const QModelIndex &proxyIndex) const
+
+bool oggTagProxy::hasChildren(const QModelIndex &parent) const
 {
-    if(proxyIndex.column() < sourceModel()->columnCount()) {
-        tagDataNode* n = (tagDataNode*) proxyIndex.internalPointer();
-
-        if(n != NULL && n->fileBaseNode.isValid()) {
-            QModelIndex sourceParent = n->fileBaseNode.parent();
-
-            return sourceModel()->index(n->fileBaseNode.row(), proxyIndex.column(), sourceParent);
-        }
+    //std::cout << parent.column() << std::endl;
+    if(parent.column() == Tag::artist) {
+        if(tagData.count(filePath(parent)) > 0)
+            return tagData.at(filePath(parent))->tagData->at(Tag::artist).size();
     }
 
-    return QModelIndex();
+    return QSortFilterProxyModel::hasChildren(parent);
 }
 
 
-QModelIndex oggTagProxy::mapFromSource(const QModelIndex &sourceIndex) const
+QVariant oggTagProxy::headerData(int section, Qt::Orientation orientation, int role) const
 {
-
-    if(sourceIndex.isValid()) {
-        QString filePath = ((QFileSystemModel*) sourceModel())->fileName(sourceIndex);
-
-        if(tagData.count(filePath) > 0) {
-            tagDataNode * n = tagData.at(filePath);
-            if(n != NULL)
-                return createIndex(n->row, sourceIndex.column(), n);
-        }
+    if(section > 0 && (role == Qt::DisplayRole || role == Qt::EditRole)) {
+        if(section == Tag::title) return QString("Title");
+        if(section == Tag::artist) return QString("Artist");
+        if(section == Tag::album) return QString("Album");
     }
 
-    return QModelIndex();
+    return QSortFilterProxyModel::headerData(section, orientation, role);
 }
 
 
 QVariant oggTagProxy::data(const QModelIndex &index, int role) const
 {
-    tagDataNode* n = (tagDataNode*) index.internalPointer();
 
-    if(index.internalPointer() != NULL) {
-        if(index.column() < sourceModel()->columnCount()) {
-            QModelIndex sourceIndex = sourceModel()->index(n->fileBaseNode.row(), index.column(),
-                                                           n->fileBaseNode.parent());
-            return sourceIndex.data();
+    if(index.column() > 0 && index.column() < columnCount()) {
+        //std::cout << index.column() << std::endl;
+        //std::cout << filePath.toStdString() << std::endl << std::flush;
+        if(tagData.count(filePath(index)) > 0) {
+            tagDataNode * n = tagData.at(filePath(index));
+            if(n->tagData->count(index.column()) > 0) {
+                if(n->tagData->at(index.column()).count(role) > 0) {
+                    //n->tagData->at(index.column()).at(role);
+                    //std::cout << index.row() << " " << index.column() << std::endl << std::flush;
+                    //std::cout << n->tagData->at(index.column()).at(role).typeName() << std::endl;
+                    //if(strncmp(n->tagData->at(index.column()).at(role).typeName(), "QVariantList", 100) == 0)
+                        //std::cout << ((QVariantList) n->tagData->at(index.column()).at(role))
+                    return n->tagData->at(index.column()).at(role);
+                }
+            }
         }
-
-        if(n->tagData->count(index.column() > 0)) {
-            if(n->tagData->at(index.column()).count(role) > 0)
-                return n->tagData->at(index.column()).at(role);
-        }
-
+        return QVariant();
     }
 
+    return QSortFilterProxyModel::data(index, role);
+}
 
-    return QVariant();
+
+bool oggTagProxy::setData(const QModelIndex &index, const QVariant &value, int role)
+{
+    if(index.column() == 0)
+        return QSortFilterProxyModel::setData(index, value, role);
+
+    //tagDataNode * n = (tagDataNode *) index.internalPointer();
+    //std::cout << n->row << std::endl << std::flush;
+
+    QString path = filePath(index);
+    Tag tag = (Tag) index.column();
+
+    if((index.column() < columnCount()) && (role == Qt::DisplayRole || role == Qt::EditRole) && tagData.count(path) > 0) {
+        //QFileSystemModel* s = (QFileSystemModel*) sourceModel();
+        //std::cout << n->fileBaseNode << " " << index.column() << std::endl << std::flush;
+
+        //QPersistentModelIndex* node = n->fileBaseNode;
+        //std::cout << "col: " << node->column() << " col count: " << columnCount()
+          //        << " ok? " << (index.column() < columnCount()) << std::endl << std::flush;
+        //QString p = s->filePath(node->operator const QModelIndex &());
+        //std::cout << "A" << std::endl << std::flush;
+
+        //QString path = ((QFileSystemModel*) sourceModel())->filePath(*n->fileBaseNode);
+        //std::cout << "train" << std::endl << std::flush;
+        if(tagData.at(path)->tagData->count(tag) > 0) {
+            tagData.at(path)->tagData->at(tag).erase(Qt::DisplayRole);
+            tagData.at(path)->tagData->at(tag).erase(Qt::EditRole);
+            //tagData.at(path)->tagData->at(tag).insert(std::make_pair(Qt::DisplayRole, value));
+            //tagData.at(path)->tagData->at(tag).insert(std::make_pair(Qt::EditRole, value));
+            return editField(path, tag, value);
+        }
+    }
+
+    return false;
+
 
 }
 
 
 Qt::ItemFlags oggTagProxy::flags(const QModelIndex &index) const
 {
-    if(index.column() < sourceModel()->columnCount())
+    if(index.column() == 0)
         return QSortFilterProxyModel::flags(index);
 
     return(Qt::ItemIsEnabled | Qt::ItemIsEditable | Qt::ItemIsSelectable);
 }
 
 
+bool oggTagProxy::editField(QString path, Tag tag, const QVariant &newVal)
+{
+    TagLib::Ogg::Vorbis::File song(QFile::encodeName(path).constData());
+
+    if(!song.isOpen()) {
+        std::cout << "failed to open " << path.toStdString() << std::endl << std::flush;
+        return false;
+    }
+
+    //std::cout << tag << std::endl;
+
+    if(tag == Tag::title)
+        song.tag()->setTitle(newVal.toString().toStdString());
+    if(tag == Tag::artist)
+        song.tag()->setArtist(newVal.toString().toStdString());
+    if(tag == Tag::album)
+        song.tag()->setAlbum(newVal.toString().toStdString());
+
+    return song.save();
+}
+
+
 void oggTagProxy::populateSong(tagDataNode * tagNode, QString path)
 {
-   TagLib::Ogg::Vorbis::File song(QFile::encodeName(path).constData());
+    TagLib::Ogg::Vorbis::File song(QFile::encodeName(path).constData());
 
-   if(!song.isOpen()) {
+    if(!song.isOpen()) {
        std::cout << "failed to open " << path.toStdString() << std::endl << std::flush;
        return;
-   }
+    }
 
-   tagDataNode * node = new tagDataNode();
+    QStringListModel* title = new QStringListModel();
+    //QStringListModel* artists = new QStringListModel();
+    //QStringListModel* album = new QStringListModel();
 
-   std::map<int, QVariant> titleInfo;
+    for(auto tag : song.tag()->fieldListMap()) {
+        if(tag.first == "TITLE")
+            title->setStringList(QStringList() << QString(tag.second.toString().toCString()));
+      /*  else if(tag.first == "ARTIST")
+            artists->setStringList(QStringList() << QString(tag.second.toString().toCString()));
+        else if(tag.first == "ALBUM")
+            artists->setStringList(QStringList() << QString(tag.second.toString().toCString()));*/
 
-   if(song.tag()->contains("TITLE")) {
-       titleInfo = {
-           std::make_pair(Qt::DisplayRole, QString(song.tag()->title().toCString())),
-           std::make_pair(Qt::EditRole, QString(song.tag()->title().toCString())),
-       };
-   }
+    }
 
-   else {
-       titleInfo = {
-           std::make_pair(Qt::DisplayRole, QString("")),
-           std::make_pair(Qt::EditRole, QString("")),
-           //std::make_pair(Qt::FontRole, QString("")),
-           //std::make_pair(Qt::ForegroundRole, QString(""))
-       };
-   }
 
-   tagNode->tagData->insert(std::make_pair(Tag::title, titleInfo));
+   /* std::map<int, QVariant> artistInfo =
+    {
+        std::make_pair(Qt::DisplayRole, artists),
+        std::make_pair(Qt::EditRole, artists)
+    };
+    std::map<int, QVariant> albumInfo =
+    {
+        std::make_pair(Qt::DisplayRole, album),
+        std::make_pair(Qt::EditRole, album)
+    };*/
+
+
+    QListView* titleView = new QListView();
+    titleView->setModel(title);
+
+
+    std::map<int, QVariant> titleInfo =
+    {
+        std::make_pair(Qt::DisplayRole, QVariant::fromValue<QListView*>(titleView)),
+        std::make_pair(Qt::EditRole, QVariant::fromValue<QListView*>(titleView))
+    };
+
+
+    tagNode->tagData->insert(std::make_pair(Tag::title, titleInfo));
+    //tagNode->tagData->insert(std::make_pair(Tag::artist, artistInfo));
+    //tagNode->tagData->insert(std::make_pair(Tag::album, albumInfo));
 
 
 }

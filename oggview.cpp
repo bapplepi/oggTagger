@@ -12,6 +12,7 @@ void oggView::h(QMouseEvent *e) {
 
 oggView::oggView(QWidget* parent) : QTreeView(parent)
 {
+    //this->setItemDelegate(new ItemDelegate());
     //connect(this,&oggView::mouseMoveEvent,this,&oggView::h);
 }
 
@@ -27,9 +28,10 @@ void oggView::mouseReleaseEvent(QMouseEvent *e)
     QModelIndex index = indexAt(e->localPos().toPoint());
 
     std::cout << "Clicked: " << e->x() <<","<<e->y() << std::endl;
+    std::cout << "Index " << index.row() << "," << index.column() << std::endl;
     std::cout << geometry().width() << " by " << geometry().height() << std::endl;
-    std::cout << "num children = " << children().size() << std::endl;
-    std::cout << "viewport s = " << viewport()->width() << " by " << viewport()->height() << std::endl;
+    //std::cout << "num children = " << children().size() << std::endl;
+    //std::cout << "viewport s = " << viewport()->width() << " by " << viewport()->height() << std::endl;
     //std::cout << "viewport children " << viewport()-> << std::endl;
     std::string indt = "  ";
 

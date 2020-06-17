@@ -20,14 +20,17 @@ MainWindow::MainWindow(QWidget *parent)
     fileModel->setFilter(QDir::AllEntries | QDir::NoDotAndDotDot);
     fileModel->setReadOnly(false);
 
-    std::set<int> valid = {0, 4};
-
     //oggTagProxy* songs = new oggTagProxy(1, valid, "C:/Users/Prime/Music/");
-    oggTagProxy* songs = new oggTagProxy();
+    oggTagProxy* songs = new oggTagProxy(0);
     //songs->setSource(fileModel);
     songs->setSourceModel(fileModel);
+    //songs->setHeaderData(1, Qt::Horizontal, QString("Title"), Qt::EditRole);
 
     oggView* songsView = new oggView(this);
+
+    songsView->setUniformRowHeights(false);
+
+    //QTreeView* songsView = new QTreeView(this);
 
     //QLabel* l = new QLabel(tr("h,jhkjh,kjhkjhlkjhlkjhlkjhklhjk"));
 
@@ -35,7 +38,7 @@ MainWindow::MainWindow(QWidget *parent)
     //setCentralWidget(l);
 
     songsView->setSortingEnabled(true);
-    songsView->setGeometry(0, 40, 1400, 760);
+    songsView->setGeometry(0, 50, 1400, 750);
 
     songsView->setModel(songs);
 
@@ -43,14 +46,10 @@ MainWindow::MainWindow(QWidget *parent)
 
     QObject::connect(fileModel, &QFileSystemModel::directoryLoaded, songs, &oggTagProxy::fill);
 
-    songsView->setEditTriggers(QTreeView::NoEditTriggers);
+    //songsView->setEditTriggers(QTreeView::NoEditTriggers);
 
     QHeaderView* h = songsView->header();
     h->setSectionResizeMode(0, QHeaderView::Stretch);
-
-    h->setSectionHidden(1, true);
-    h->setSectionHidden(2, true);
-    h->setSectionHidden(3, true);
 
     //new QAbstractItemModelTester(songs, QAbstractItemModelTester::FailureReportingMode::Warning, this);
 
