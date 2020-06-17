@@ -41,6 +41,8 @@ MainWindow::MainWindow(QWidget *parent)
 
     songsView->setRootIndex(songs->mapFromSource(fileModel->index("C:/Users/Prime/Music/")));
 
+    QObject::connect(fileModel, &QFileSystemModel::directoryLoaded, songs, &oggTagProxy::fill);
+
     songsView->setEditTriggers(QTreeView::NoEditTriggers);
 
     QHeaderView* h = songsView->header();
@@ -50,7 +52,7 @@ MainWindow::MainWindow(QWidget *parent)
     h->setSectionHidden(2, true);
     h->setSectionHidden(3, true);
 
-    new QAbstractItemModelTester(songs, QAbstractItemModelTester::FailureReportingMode::Warning, this);
+    //new QAbstractItemModelTester(songs, QAbstractItemModelTester::FailureReportingMode::Warning, this);
 
 
 

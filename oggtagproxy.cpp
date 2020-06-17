@@ -1,33 +1,29 @@
 #include "oggtagproxy.h"
 
+/*struct tagDataNode {
+    int row;
+
+    QPersistentModelIndex fileBaseNode;
+    QPersistentModelIndex proxyBaseNode;
+
+    tagDataMap tagData;
+};*/
+
 void oggTagProxy::fill(const QString &path)
 {
-    QStringList pathComponents = path.split("/");
-    QString dirName = pathComponents.takeLast();
 
-    tagDataNode* node;
+    std::cout << "dir loaded " << path.toStdString() << std::endl << std::flush;
 
-    if(path.compare(rootPath) == 0) {
-        node = &tagDataRoot;
-    }
+    tagDataNode* node = new tagDataNode();
 
-    else {
-        node = new tagDataNode();
+    QModelIndex idx = ((QFileSystemModel*) sourceModel())->index(path);
 
-        node->row = sourceModel()->index(path).row();
-        node->column = 0;
+    node->row = idx.row();
+    node->fileBaseNode = QPersistentModelIndex(idx);
+    node->proxyBaseNode = QPersistentModelIndex(QSortFilterProxyModel::mapFromSource(idx));
+    node->tagData = new tagDataMap();
 
-        QString parentPath = path.left(path.size() - dirName.size());
-
-        if(dirs.count(parentPath) > 0)
-            node->parent = dirs.at(parentPath);
-
-        dirs.insert(std::make_pair(path, node));
-
-        if(node->parent != NULL)
-            node->parent->children.insert(std::make_pair(std::make_pair(node->row, node->column), node));
-
-    }
+    tagData.insert(std::make_pair(path, node));
 
 
     QDirIterator it(path, QDir::Files | QDir::AllDirs);
@@ -36,38 +32,31 @@ void oggTagProxy::fill(const QString &path)
 
         it.next();
 
-        QModelIndex baseNode = sourceModel()->index(it.filePath());
+        node = new tagDataNode();
 
-        tagDataNode * n = new tagDataNode();
-        n->row = sourceModel()->index(it.filePath()).row();
-        n->column = 0;
-        n->parent = node;
+        idx = ((QFileSystemModel*) sourceModel())->index(it.filePath());
 
-        std::pair<int, int> coords(n->row, n->column);
-        if(dirs.count(dirName) > 0)
-            dirs.at(dirName)->children.insert(std::make_pair(coords, n));
+        node->row = idx.row();
+        node->fileBaseNode = QPersistentModelIndex(idx);
+        node->proxyBaseNode = QPersistentModelIndex(QSortFilterProxyModel::mapFromSource(idx));
+        node->tagData = new tagDataMap();
 
-        //n->baseinternalPointer = sourceModel()->index(n->path).internalPointer();
+        tagData.insert(std::make_pair(it.filePath(), node));
 
         if(it.fileName().contains(".ogg"))
-            populateSong(n, it.filePath());
+            populateSong(node, it.filePath());
     }
 
     return;
 }
 
+oggTagProxy::oggTagProxy() {
 
-bool oggTagProxy::setData(const QModelIndex &index, const QVariant &value, int role)
-{
-    std::cout << "setdata" << std::endl;
-    return QSortFilterProxyModel::setData(index, value, role);
+
 }
 
 
-oggTagProxy::oggTagProxy() {}
-
-
-oggTagProxy::oggTagProxy(int extra, std::set<int> valid, QString root) : extraColumns(extra), QSortFilterProxyModel(),
+/*oggTagProxy::oggTagProxy(int extra, std::set<int> valid, QString root) : extraColumns(extra), QSortFilterProxyModel(),
                                                                              rootPath(root)
 {
     validColumns = valid;
@@ -77,97 +66,45 @@ oggTagProxy::oggTagProxy(int extra, std::set<int> valid, QString root) : extraCo
     tagDataRoot.parent = NULL;
 
     dirs.insert(std::make_pair(rootPath, &tagDataRoot));
-}
-
-
-QFileSystemModel* oggTagProxy::sourceModel() const
-{
-    QAbstractItemModel *m = QSortFilterProxyModel::sourceModel();
-    if(m != NULL)
-        return dynamic_cast<QFileSystemModel*>(m);
-    return NULL;
-}
-
-
-QModelIndex oggTagProxy::getParentFromNode(void* ptr) const
-{
-    if(ptr == NULL) {
-        QModelIndex i = QModelIndex();
-        std::cout << "get parent rtns " << i.row() << " " << i.column() << std::endl;
-        return i;
-    }
-
-    tagDataNode* n = (tagDataNode*) ptr;
-    //std::cout << "get parent rtns " << n->parent->row << " " << n->parent->column << std::endl;
-
-    return createIndex(n->parent->row, n->parent->column, n->parent);
-
-}
-
+}*/
 
 QModelIndex oggTagProxy::parent(const QModelIndex &child) const
 {
-   /* QFileSystemModel* m = sourceModel();
-    if(child.column() < m->columnCount())
-        return QSortFilterProxyModel::parent(child);
+    if(child.internalPointer() != NULL) {
+        QModelIndex baseChild = ((tagDataNode*) child.internalPointer())->fileBaseNode;
+        QModelIndex baseParent = sourceModel()->parent(baseChild);
+        return mapFromSource(baseParent);
 
-    QModelIndex p = QSortFilterProxyModel::parent(QSortFilterProxyModel::index(child.row(), 0));
+    }
 
-    //std::cout << "index is " << child.row() << " " << child.column() << "      parent of col 0 is " << p.data().toString().toStdString() << std::endl;
-    return QSortFilterProxyModel::parent(index(child.row(), 1, p));*/
-
-    return getParentFromNode(child.internalPointer());
-}
-
-
-
-QModelIndex oggTagProxy::sibling(int row, int column, const QModelIndex &idx) const
-{
-    QModelIndex i = QModelIndex();
-    std::cout << row << " " << column << i.row() << " " << i.column() << std::endl << std::flush;
-    return i;
-}
-
-
-QModelIndex oggTagProxy::index(tagDataNode * node) const
-{
-    if(node->parent != NULL)
-        return index(node->row, node->column, index(node->parent));
-    return index(node->row, node->column, QModelIndex());
+    return QModelIndex();
 }
 
 
 QModelIndex oggTagProxy::index(int row, int column, const QModelIndex &parent) const
 {
-    //std::cout << row << " " << column << std::endl;
+    if(row >= 0 && column >= 0 && row < rowCount(parent) && column < columnCount(parent)) {
+        //std::cout << row << " " << column << std::endl << std::flush;
+        QModelIndex proxyIndex;
 
-    /*if(column < sourceModel()->columnCount())
-        return QSortFilterProxyModel::index(row, column, parent);
-
-    //std::cout << "parent is \'" << parent.data().toString().toStdString() << "\' and is valid? " << parent.isValid()
-      //        << "          row is " << row << " and col is " << column << std::endl << std::flush;
-
-    if(parent.isValid() && parent.data().toString() != NULL && dirs.count(parent.data().toString())) {
-        tagDataNode* dir = dirs.at(parent.data().toString());
-
-        if(dir->children.size() > row) {
-            tagDataNode* dat = (dir->children)[row];
-            return createIndex(row, column, dat);
+        if(parent.internalPointer() != NULL) {
+            tagDataNode* p = (tagDataNode*) parent.internalPointer();
+            proxyIndex = QSortFilterProxyModel::index(row, column, p->proxyBaseNode);
         }
-    }*/
-
-
-    if(row >= 0 && row < rowCount(parent) && column >= 0 && column < columnCount(parent)) {
-        tagDataNode parentNode;
-
-        if(!parent.isValid())
-            parentNode = tagDataRoot;
         else
-            parentNode = *((tagDataNode*) parent.internalPointer());
+            proxyIndex = QSortFilterProxyModel::index(row, column, QModelIndex());
 
-        tagDataNode* child = (tagDataNode*) parent.internalPointer();
+        QModelIndex sourceIndex = QSortFilterProxyModel::mapToSource(proxyIndex);
+        QString filePath = ((QFileSystemModel*) sourceModel())->filePath(sourceIndex);
 
-        return createIndex(row, column, child);
+        //std::cout << filePath.toStdString() << std::endl << std::flush;
+
+        if(tagData.count(filePath) > 0) {
+            tagDataNode* n = tagData.at(filePath);
+            return createIndex(row, column, n);
+        }
+        else
+            return createIndex(row, column, (void *) NULL);
     }
 
     return QModelIndex();
@@ -176,42 +113,36 @@ QModelIndex oggTagProxy::index(int row, int column, const QModelIndex &parent) c
 
 int oggTagProxy::columnCount(const QModelIndex &parent) const
 {
-    return QSortFilterProxyModel::columnCount() + extraColumns;
+    return QSortFilterProxyModel::columnCount(parent) + extraColumns;
 }
 
-
+//assume index belongs to our model
 QModelIndex oggTagProxy::mapToSource(const QModelIndex &proxyIndex) const
 {
-    if(proxyIndex.column() > sourceModel()->columnCount() || proxyIndex.column() < 0
-            || proxyIndex.row() < 0 || proxyIndex.internalPointer() == NULL)
-        return QModelIndex();
+    if(proxyIndex.column() < sourceModel()->columnCount()) {
+        tagDataNode* n = (tagDataNode*) proxyIndex.internalPointer();
 
-    QString fileName;
+        if(n != NULL && n->fileBaseNode.isValid()) {
+            QModelIndex sourceParent = n->fileBaseNode.parent();
 
-    if(proxyIndex.column() == 0)
-        fileName = *((QString*) proxyIndex.internalPointer());
-    else
-        fileName = *((QString*) proxyIndex.parent().internalPointer());
+            return sourceModel()->index(n->fileBaseNode.row(), proxyIndex.column(), sourceParent);
+        }
+    }
 
-
-    QModelIndex sourceFileIndex = sourceModel()->index(fileName);
-    return sourceModel()->index(sourceFileIndex.row(), sourceFileIndex.column(),
-                                sourceFileIndex.parent());
+    return QModelIndex();
 }
 
 
 QModelIndex oggTagProxy::mapFromSource(const QModelIndex &sourceIndex) const
 {
+
     if(sourceIndex.isValid()) {
-        QString parentPath = sourceIndex.parent().data().toString();
-        if(dirs.count(parentPath) > 0) {
-            tagDataNode* parent = dirs.at(parentPath);
-            if(parent->children.count(std::make_pair(sourceIndex.row(),
-                                                     sourceIndex.column())) > 0) {
-                tagDataNode* node = parent->children.at(std::make_pair(sourceIndex.row(),
-                                                                   sourceIndex.column()));
-                return index(node);
-            }
+        QString filePath = ((QFileSystemModel*) sourceModel())->fileName(sourceIndex);
+
+        if(tagData.count(filePath) > 0) {
+            tagDataNode * n = tagData.at(filePath);
+            if(n != NULL)
+                return createIndex(n->row, sourceIndex.column(), n);
         }
     }
 
@@ -221,20 +152,25 @@ QModelIndex oggTagProxy::mapFromSource(const QModelIndex &sourceIndex) const
 
 QVariant oggTagProxy::data(const QModelIndex &index, int role) const
 {
-    if(validColumns.count(index.column()) <= 0)
-        return QVariant();
+    tagDataNode* n = (tagDataNode*) index.internalPointer();
 
-    if(index.internalPointer() == NULL)
-        return QVariant();
+    if(index.internalPointer() != NULL) {
+        if(index.column() < sourceModel()->columnCount()) {
+            QModelIndex sourceIndex = sourceModel()->index(n->fileBaseNode.row(), index.column(),
+                                                           n->fileBaseNode.parent());
+            return sourceIndex.data();
+        }
 
-    tagDataNode * node = (tagDataNode *) index.internalPointer();
+        if(n->tagData->count(index.column() > 0)) {
+            if(n->tagData->at(index.column()).count(role) > 0)
+                return n->tagData->at(index.column()).at(role);
+        }
 
-    tagDataMap * tags = (tagDataMap *) node->data;
+    }
 
-    if(tags->count(role) > 0)
-        return tags->at(role);
 
     return QVariant();
+
 }
 
 
@@ -247,16 +183,7 @@ Qt::ItemFlags oggTagProxy::flags(const QModelIndex &index) const
 }
 
 
-void oggTagProxy::setSource(QFileSystemModel *sourceModel)
-{
-    QSortFilterProxyModel::setSourceModel(sourceModel);
-    QObject::connect(sourceModel, &QFileSystemModel::directoryLoaded,
-                     this, &oggTagProxy::fill);
-    //tagDataRoot.name = sourceModel->rootPath().split("/").takeLast();
-}
-
-
-void oggTagProxy::populateSong(tagDataNode * leftmostNode, QString path)
+void oggTagProxy::populateSong(tagDataNode * tagNode, QString path)
 {
    TagLib::Ogg::Vorbis::File song(QFile::encodeName(path).constData());
 
@@ -285,8 +212,7 @@ void oggTagProxy::populateSong(tagDataNode * leftmostNode, QString path)
        };
    }
 
-   leftmostNode->children.insert(std::make_pair(std::make_pair(leftmostNode->row, int(Tag::title)), node));
+   tagNode->tagData->insert(std::make_pair(Tag::title, titleInfo));
 
-   node->data = &titleInfo;
 
 }
